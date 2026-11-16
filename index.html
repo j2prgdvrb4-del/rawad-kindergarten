@@ -1,0 +1,255 @@
+
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>فصل الرواد - سجل المتابعة</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f5eee3;color:#493a2e;font-family:Tahoma,Arial}
+header{text-align:center;background:#e8d6bd;padding:24px}
+h1{color:#704d32;margin:5px}
+main{max-width:1050px;margin:20px auto;padding:12px}
+.panel,.child{background:#fffdf8;border:1px solid #dfcdb5;border-radius:16px;padding:16px;margin-bottom:15px}
+h2{color:#876344;font-size:19px}
+input,select,textarea,button{font:inherit;padding:10px;border:1px solid #ddcbb3;border-radius:9px;max-width:100%}
+input,select,textarea{background:#fff}
+button{background:#98724e;color:white;border:0;cursor:pointer;margin:4px}
+.light{background:#eadcc9;color:#493a2e}
+.danger{background:#f3e1dc;color:#984c43}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:12px}
+.field{display:block;margin:10px 0}
+.field span{display:block;font-size:13px;margin-bottom:5px}
+.field input,.field select,.field textarea{width:100%}
+.days{display:flex;flex-wrap:wrap;gap:7px;margin:10px 0}
+.days label{background:#f4eade;padding:8px;border-radius:8px;font-size:12px}
+.stats{display:flex;gap:10px;flex-wrap:wrap}
+.stat{background:#f1e5d5;padding:12px;border-radius:10px;flex:1;text-align:center}
+small{color:#806e5c}
+.plan{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+.child h3{margin:0;color:#704d32}
+.top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+@media(max-width:500px){.top{align-items:flex-start;flex-direction:column}}
+</style>
+</head>
+<body>
+<header>
+<h1>🌿 فصل الرواد 🌿</h1>
+<p>سجل متابعة الأطفال الأسبوعي</p>
+<strong>المعلمة: حنان مدخلي</strong>
+</header>
+<main>
+
+<section class="panel">
+<h2>📅 إعداد الأسبوع</h2>
+<label class="field"><span>تاريخ بداية الأسبوع</span>
+<input type="date" id="week"></label>
+<div class="plan">
+<label class="field"><span>اسم الوحدة</span>
+<input id="unit" placeholder="اكتبي اسم الوحدة"></label>
+<label class="field"><span>الحرف المستهدف</span>
+<input id="targetLetter" placeholder="مثال: ض"></label>
+<label class="field"><span>السورة القرآنية</span>
+<input id="targetSurah" placeholder="اسم السورة"></label>
+<label class="field"><span>العدد المستهدف</span>
+<select id="targetNumber">
+<option value="">اختاري العدد</option>
+<option>1</option><option>2</option><option>3</option>
+<option>4</option><option>5</option><option>6</option>
+<option>7</option><option>8</option><option>9</option>
+<option>10</option><option>11</option><option>12</option>
+<option>13</option><option>14</option><option>15</option>
+</select></label>
+</div>
+<button onclick="savePlan()">حفظ خطة الأسبوع</button>
+<small id="saved"></small>
+</section>
+
+<section class="panel">
+<h2>📊 ملخص الفصل</h2>
+<div class="stats">
+<div class="stat"><b id="total">12</b><br><small>عدد الأطفال</small></div>
+<div class="stat"><b id="absent">0</b><br><small>حالات الغياب</small></div>
+<div class="stat"><b id="done">0</b><br><small>متابعات مكتملة</small></div>
+</div>
+</section>
+
+<section class="panel">
+<h2>➕ إضافة طفل جديد</h2>
+<input id="newName" placeholder="اسم الطفل">
+<button onclick="addChild()">إضافة الطفل</button>
+</section>
+
+<section class="panel">
+<div class="top">
+<h2>👧🏻 متابعة الأطفال</h2>
+<small>سجل الأسبوع المحدد</small>
+</div>
+<div id="students" class="grid"></div>
+</section>
+
+<section class="panel">
+<h2>📑 التقارير والنسخ الاحتياطية</h2>
+<button onclick="exportCSV()">تصدير تقرير Excel</button>
+<button class="light" onclick="window.print()">طباعة / PDF</button>
+<button class="light" onclick="backup()">حفظ نسخة احتياطية</button>
+<label class="field">
+<span>استعادة نسخة سابقة</span>
+<input type="file" accept=".json" onchange="restoreData(this)">
+</label>
+</section>
+</main>
+
+<script>
+const initialNames=[
+"أحمد منسكي","أحمد عريشي","أنس قيسي","أصيل غوير",
+"البدر عواجي","إياد غزواني","إيلاف حمدي","سعود عريشي",
+"فرح حمدي","كنان شعبي","ملك كريري","نواف عريشي"
+];
+const days=["الأحد","الاثنين","الثلاثاء","الأربعاء","الخميس"];
+const store="rawad_complete_v2";
+let db=JSON.parse(localStorage.getItem(store)||"null")||
+{names:initialNames, weeks:{}};
+
+const $=id=>document.getElementById(id);
+const today=new Date();
+const localDate=new Date(today.getTime()-today.getTimezoneOffset()*60000)
+.toISOString().slice(0,10);
+$("week").value=localDate;
+
+function key(){return $("week").value||localDate}
+function current(){
+if(!db.weeks[key()]) db.weeks[key()]={unit:"",letter:"",surah:"",number:"",children:{}};
+let w=db.weeks[key()];
+db.names.forEach(n=>{
+if(!w.children[n])w.children[n]={absent:[],letter:"",number:"",surah:"",notes:""};
+});
+return w;
+}
+function save(){localStorage.setItem(store,JSON.stringify(db));summary()}
+function savePlan(){
+let w=current();
+w.unit=$("unit").value;
+w.letter=$("targetLetter").value;
+w.surah=$("targetSurah").value;
+w.number=$("targetNumber").value;
+save();
+$("saved").textContent="تم حفظ خطة الأسبوع ✓";
+}
+function loadWeek(){
+let w=current();
+$("unit").value=w.unit;
+$("targetLetter").value=w.letter;
+$("targetSurah").value=w.surah;
+$("targetNumber").value=w.number;
+$("saved").textContent="";
+render();
+}
+function addChild(){
+let n=$("newName").value.trim();
+if(!n)return alert("اكتبي اسم الطفل");
+if(db.names.includes(n))return alert("الاسم موجود بالفعل");
+db.names.push(n);
+$("newName").value="";
+save();render();
+}
+function removeChild(n){
+if(!confirm("هل تريدين حذف "+n+" من القائمة؟"))return;
+db.names=db.names.filter(x=>x!==n);
+Object.values(db.weeks).forEach(w=>delete w.children[n]);
+save();render();
+}
+function update(n,f,v){
+current().children[n][f]=v;save();
+}
+function toggle(n,d,on){
+let a=current().children[n].absent;
+if(on&&!a.includes(d))a.push(d);
+if(!on)current().children[n].absent=a.filter(x=>x!==d);
+save();render();
+}
+function esc(s){
+return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+function render(){
+let w=current();
+$("students").innerHTML=db.names.map(n=>{
+let r=w.children[n];
+return `<article class="child">
+<div class="top">
+<h3>${esc(n)}</h3>
+<button class="danger" onclick="removeChild('${esc(n)}')">حذف الاسم</button>
+</div>
+<p><small>الوحدة: ${esc(w.unit||"لم تحدد")} | الحرف: ${esc(w.letter||"لم يحدد")} | السورة: ${esc(w.surah||"لم تحدد")}</small></p>
+<strong>الغياب الأسبوعي</strong>
+<div class="days">${days.map(d=>`
+<label><input type="checkbox" ${r.absent.includes(d)?"checked":""}
+onchange="toggle('${esc(n)}','${d}',this.checked)"> ${d}</label>`).join("")}</div>
+
+<label class="field"><span>متابعة الحرف المستهدف</span>
+<input value="${esc(r.letter)}" placeholder="مثال: أتقن / يحتاج تدريب"
+onchange="update('${esc(n)}','letter',this.value)"></label>
+
+<label class="field"><span>العدد الذي وصل إليه</span>
+<select onchange="update('${esc(n)}','number',this.value)">
+<option value="">لم يحدد</option>
+${Array.from({length:15},(_,i)=>String(i+1)).map(x=>`<option ${r.number===x?"selected":""}>${x}</option>`).join("")}
+</select></label>
+
+<label class="field"><span>متابعة السورة القرآنية</span>
+<input value="${esc(r.surah)}" placeholder="مثال: حفظ / يحتاج مراجعة"
+onchange="update('${esc(n)}','surah',this.value)"></label>
+
+<label class="field"><span>ملاحظات المعلمة</span>
+<textarea rows="2" onchange="update('${esc(n)}','notes',this.value)">${esc(r.notes)}</textarea></label>
+</article>`;
+}).join("");
+summary();
+}
+function summary(){
+let w=current();
+$("total").textContent=db.names.length;
+$("absent").textContent=db.names.reduce((a,n)=>a+w.children[n].absent.length,0);
+$("done").textContent=db.names.filter(n=>{
+let r=w.children[n];return r.letter||r.number||r.surah;
+}).length;
+}
+function exportCSV(){
+let w=current();
+let rows=[
+["اسم الطفل","الوحدة","الحرف المستهدف","السورة المستهدفة","العدد المستهدف","أيام الغياب","متابعة الحرف","العدد المحقق","متابعة السورة","ملاحظات"]
+];
+db.names.forEach(n=>{
+let r=w.children[n];
+rows.push([n,w.unit,w.letter,w.surah,w.number,r.absent.join("، "),r.letter,r.number,r.surah,r.notes]);
+});
+let csv="\uFEFF"+rows.map(row=>row.map(x=>'"'+String(x??"").replace(/"/g,'""')+'"').join(",")).join("\n");
+let a=document.createElement("a");
+a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
+a.download="متابعة-فصل-الرواد-"+key()+".csv";a.click();
+URL.revokeObjectURL(a.href);
+}
+function backup(){
+let a=document.createElement("a");
+a.href=URL.createObjectURL(new Blob([JSON.stringify(db,null,2)],{type:"application/json"}));
+a.download="نسخة-فصل-الرواد.json";a.click();
+URL.revokeObjectURL(a.href);
+}
+function restoreData(input){
+let f=input.files[0];if(!f)return;
+let reader=new FileReader();
+reader.onload=()=>{
+try{
+let x=JSON.parse(reader.result);
+if(!Array.isArray(x.names)||!x.weeks)throw 0;
+db=x;save();loadWeek();alert("تم استرجاع النسخة بنجاح");
+}catch(e){alert("النسخة غير صالحة");}
+};
+reader.readAsText(f);
+}
+$("week").onchange=loadWeek;
+loadWeek();
+</script>
+</body>
+</html>
